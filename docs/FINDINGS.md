@@ -177,7 +177,7 @@ public numbers against the additional-certificates bag when the loader returns
 `verify_keybag.py` returned all eight passes on the actual exported identity:
 
 ```
-certificate loads: C=US,O=MichaelHome,CN=Apple Configurator: MichaelHome (4C6535DE-...)
+certificate loads: C=US,O=<org>,CN=Apple Configurator: <org> (<uuid>)
 certificate public key matches the private key
 certificate valid for another 7299 days (until 2046-09-11)
 DER encodes for SupervisorCertificate (947 bytes)

@@ -50,6 +50,12 @@ echo
 echo "tracked files: $(git ls-files | wc -l | tr -d ' ')"
 echo
 echo "secret check, should print nothing:"
+# Read the device id out of the untracked local cache so this script never
+# contains it, otherwise the grep matches itself.
+UDID_FILE=results/artifacts/udid.txt
 git ls-files | grep -Ei '\.(p12|pfx|pem|key|cer|crt)$' || true
-git grep -l "00008140" -- . 2>/dev/null || true
+if [ -s "$UDID_FILE" ]; then
+  git grep -l "$(cat "$UDID_FILE")" -- . 2>/dev/null || true
+fi
+git ls-files -z | xargs -0 grep -lE "^-----BEGIN (RSA |EC )?PRIVATE KEY-----" 2>/dev/null || true
 echo "(clean)"

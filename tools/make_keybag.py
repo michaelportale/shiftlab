@@ -10,7 +10,7 @@ Uses cryptography's PKCS12 loader rather than the openssl CLI, because
 `openssl pkcs12 -clcerts` silently returns nothing when the certificate is not
 flagged as a client cert, which is common in Configurator exports.
 
-    python tools/make_keybag.py ~/.shiftd/MichaelHome.p12 ~/.shiftd/keybag.pem
+    python tools/make_keybag.py ~/.shiftd/<identity>.p12 ~/.shiftd/keybag.pem
 """
 from __future__ import annotations
 
