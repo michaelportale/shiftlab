@@ -1,0 +1,109 @@
+# shiftd config. Copy to ~/.config/shiftd/config.toml and edit.
+#
+# Everything here is validated at startup. A typo in a bundle id will not be
+# caught (iOS just ignores an id that matches nothing), but a typo anywhere
+# else fails loudly with the key name.
+
+[device]
+# `pymobiledevice3 usbmux list`, or Finder > iPhone > the text under the name.
+udid = "00008130-000A1B2C3D4E001E"
+name = "Michael's iPhone 16"
+# Supervision identity exported from Apple Configurator:
+# File > Export > Supervision Identity. Without this, iOS parks every profile
+# in Settings waiting for a tap, which defeats the whole daemon.
+keybag = "~/.config/shiftd/supervision.p12"
+
+[daemon]
+state_file = "~/.local/state/shiftd/state.json"
+log_file = "~/Library/Logs/shiftd/shiftd.log"
+# Re-push the profile whenever the phone reappears without it. Turning this off
+# makes "unplug the cable and delete it" a bypass.
+reassert = true
+# Wall clock vs monotonic clock disagreement, in seconds, before a tick is
+# logged as a clock jump. NTP corrections are far below this.
+clock_jump_tolerance_s = 120
+profile_removal_disallowed = true
+organization = "shiftd"
+
+[blocklists]
+social = [
+  "com.burbn.instagram",        # Instagram
+  "com.burbn.barcelona",        # Threads
+  "com.zhiliaoapp.musically",   # TikTok
+  "com.google.ios.youtube",     # YouTube
+  "com.atebits.Tweetie2",       # X, still the old Tweetie bundle id
+  "com.reddit.Reddit",          # Reddit
+  "com.facebook.Facebook",      # Facebook
+  "com.toyopagroup.picaboo",    # Snapchat
+  "com.linkedin.LinkedIn",      # LinkedIn
+  "pinterest",                  # Pinterest, genuinely this short
+  "com.hammerandchisel.discord",# Discord
+  "tv.twitch",                  # Twitch
+]
+
+games = [
+  "com.roblox.robloxmobile",    # Roblox
+  "com.mojang.minecraftpe",     # Minecraft
+  "com.supercell.magic",        # Clash of Clans
+  "com.supercell.scroll",       # Clash Royale
+  "com.king.candycrushsaga",    # Candy Crush
+  "com.innersloth.amongus",     # Among Us
+  "com.playrix.homescapes",     # Homescapes
+  "com.chess.chesskid",         # Chess Kid
+]
+
+# Everything that is a problem at 1am. Used by the locked sleep schedule.
+night = [
+  "com.burbn.instagram",
+  "com.burbn.barcelona",
+  "com.zhiliaoapp.musically",
+  "com.google.ios.youtube",
+  "com.atebits.Tweetie2",
+  "com.reddit.Reddit",
+  "com.facebook.Facebook",
+  "com.toyopagroup.picaboo",
+  "com.hammerandchisel.discord",
+  "tv.twitch",
+  "com.netflix.Netflix",
+  "com.roblox.robloxmobile",
+  "com.mojang.minecraftpe",
+  "com.king.candycrushsaga",
+]
+
+# --- rules -----------------------------------------------------------------
+# kind = "schedule"  recurring window, may cross midnight
+# kind = "session"   named preset with a fixed duration, started by hand
+# kind = "manual"    started by hand, duration on the command line
+#
+# locked = true means it cannot be ended early, including from this Mac.
+
+[[rules]]
+name = "sleep"
+kind = "schedule"
+blocklist = "night"
+days = "daily"
+start = "22:30"
+end = "07:00"
+locked = true
+
+[[rules]]
+name = "deep-work"
+kind = "session"
+blocklist = "social"
+duration = "90m"
+locked = false            # start it with --locked when you mean it
+
+[[rules]]
+name = "workday"
+kind = "schedule"
+blocklist = "social"
+days = ["mon", "tue", "wed", "thu", "fri"]
+start = "09:00"
+end = "12:30"
+locked = false
+
+[[rules]]
+name = "no-games"
+kind = "manual"
+blocklist = "games"
+locked = false

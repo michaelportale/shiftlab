@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  shiftd LaunchAgent. Runs one reconcile pass every 60 seconds.
+
+  Edit the three absolute paths before loading: launchd does not expand ~, and
+  it does not read your shell profile, so the interpreter has to be spelled out.
+  If you are not using a venv, point Program to /usr/bin/python3 and make sure
+  pymobiledevice3 is importable from it.
+
+  Load and unload instructions: docs/DAEMON.md
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.shiftd.agent</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/michaelportale/Personal-Projects/shiftlab/.venv/bin/python3</string>
+        <string>-m</string>
+        <string>shiftd</string>
+        <string>reconcile</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/michaelportale/Personal-Projects/shiftlab</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- So `-m shiftd` resolves without installing the package. -->
+        <key>PYTHONPATH</key>
+        <string>/Users/michaelportale/Personal-Projects/shiftlab</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+
+    <!-- Every 60s. A missed run is not a problem: reconcile is idempotent and
+         the next pass re-derives everything from config, state and the clock. -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <!-- Enforce immediately at login and after a reboot, without waiting 60s. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/michaelportale/Library/Logs/shiftd/agent.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/michaelportale/Library/Logs/shiftd/agent.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+
+    <!-- No KeepAlive on purpose: reconcile is a one shot pass that exits.
+         KeepAlive would restart it in a tight loop. -->
+</dict>
+</plist>

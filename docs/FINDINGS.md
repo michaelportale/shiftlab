@@ -1,0 +1,213 @@
+# Findings
+
+Verified facts accumulated across harness runs. The per-run reports in
+`results/` get overwritten; this file does not.
+
+Device: iPhone 16. Mac: Apple Silicon. pymobiledevice3 11.12.5.
+
+## Run 1, 2026-09-16
+
+| # | Result | What it means |
+| --- | --- | --- |
+| 01 | Confirmed | `lockdown info` opens a session against a stock unsupervised iPhone 16. Transport is fine. |
+| 02 | Confirmed | `apps list` enumerates user apps. Flag is `--userspace` on 11.12.5; `--user` and `-u` are rejected. |
+| 03 | Invalid | Ran with a display name instead of a bundle id. See the exit-code trap below. Redone, see below. |
+| 04 | **Confirmed** | A profile pushed over lockdown to an unsupervised device installs, but **requires a tap in Settings**. No unattended flips without supervision plus a keybag. |
+| 05 | Unanswered | Contradicted itself: the web clip appeared, so the profile installed, but the profile was reported as not listed in Settings. Redo. |
+| 06 | **Confirmed** | A profile containing `blockedAppBundleIDs` **installs cleanly and is then ignored** on an unsupervised device. Icons do not disappear. The supervision gate is real, and it fails silently rather than rejecting the profile. |
+| 07 | Failed, cause unknown | `lockdown info --mobdev2` returned "Device is not connected". Could be Wi-Fi sync never actually enabled, no sync completed since ticking it, or network client isolation. Not yet a verdict on the approach. |
+
+### Traps found the hard way
+
+**`apps uninstall` exits 0 on a bundle id that does not exist.** No error, no
+warning. A typo is indistinguishable from success until you look at the phone.
+Check 03 now validates against the inventory first and re-lists afterwards
+rather than trusting the exit code.
+
+**`profile install` exits 0 for supervised-only keys on an unsupervised
+device.** Same shape of problem: the profile is accepted, the key is dropped.
+Never treat exit 0 from a profile install as proof the restriction applied.
+
+**`lockdown info --tunnel` is not a wireless test.** It needs a running
+`tunneld` and sudo, and it exercises the iOS 17+ RemoteXPC path, which has
+nothing to do with mobdev2 Bonjour lockdown. Removed from check 07.
+
+### Useful for RECOVERY.md
+
+Cleanup in run 1 removed both profiles with `pymobiledevice3 profile remove
+<identifier>` and no keybag, despite `PayloadRemovalDisallowed: true` being set
+on both. So on an **unsupervised** device, Mac-side removal beats
+`PayloadRemovalDisallowed`. Whether that still holds once the device is
+supervised is check 10 and is the thing your emergency unshift depends on. Check
+05 now probes this explicitly and records it.
+
+## Run 2, 2026-09-16 (check 03 redo)
+
+**Confirmed: uninstall over lockdown works on iOS 26, unsupervised, with no
+prompt on the device.** `apps uninstall com.linkedin.LinkedIn` removed the app;
+verified by re-listing over the wire, not just by looking at the Home Screen.
+
+So **Path 01 is a real fallback.** If supervision turns out to be more trouble
+than it is worth, a launchd agent that uninstalls a blocklist on a schedule
+works today with no erase, no dev account and no supervision. The cost is app
+data and one-tap reinstall from the App Store, so it is friction rather than
+enforcement.
+
+## Run 3, 2026-09-16 (checks 05 and 07)
+
+Device confirmed: iPhone17,3, iOS 26.6.2, UDID cached locally, not recorded here,
+unsupervised. Cached to `results/artifacts/udid.txt`.
+
+### Major finding: `profile install` only STAGES on an unsupervised device
+
+`pymobiledevice3 profile list` returned an empty manifest both before and after
+a successful `profile install`:
+
+```
+{"OrderedIdentifiers": [], "ProfileManifest": {}, "ProfileMetadata": {}, "Status": "Acknowledged"}
+```
+
+The install exits 0 and logs "installing", but the profile does not exist on the
+device until the user taps through Settings > Profile Downloaded > Install. In
+run 1 the web clip only appeared after that tap.
+
+Together with check 04, this settles the architecture question:
+**unattended profile flips are impossible on an unsupervised device.** Not
+awkward, not slow. Impossible. Every schedule change would need a human tapping
+Install. Supervision plus a working keybag is the only route to a daemon, and
+that means the erase.
+
+### Check 07: closer than it looked
+
+`bonjour mobdev2` exits 0 and finds the phone at 192.168.50.75 as a
+`TcpLockdownClient`. The failure was `Choose device: interactive selection
+requires a terminal`, because Bonjour returns duplicate candidates and the CLI
+cannot prompt. Fixed by passing `--udid`, which the daemon must always do
+anyway since a launchd job has no terminal.
+
+Still unresolved: the listing reported `PAIRED:False`, which may mean the pair
+record has no Wi-Fi address yet because no full sync completed after ticking
+Finder's Wi-Fi box.
+
+### Correction
+
+`lockdown info` reports `"PasswordProtected": false`, but check 05 confirmed iOS
+demanded the device passcode before removing the profile. So a passcode IS set
+and that field means something else, probably whether the device is locked right
+now. Do not use it to reason about passcode state.
+
+## Run 4, 2026-09-16 (check 05, answered)
+
+**FAIL, which is the answer we needed.** With `PayloadRemovalDisallowed: true`
+set, on an unsupervised iPhone 16 running iOS 26.6.2:
+
+- The profile IS listed in Settings > General > VPN & Device Management
+- A "Remove Profile" button IS present
+- Tapping it DID remove the profile
+- iOS demanded the device passcode first
+
+So `PayloadRemovalDisallowed` buys exactly one passcode prompt on an
+unsupervised device. Nothing more. This matches Apple's documented behavior:
+unsupervised, iOS requires configuration profiles to be user-removable.
+
+### Phase 1 verdict
+
+| Question | Answer |
+| --- | --- |
+| Does the transport work? | Yes |
+| Does uninstall-as-blocking work today, no erase? | **Yes, Path 01 is live** |
+| Can profiles install unattended, unsupervised? | **No. Staged only, needs a tap** |
+| Does `blockedAppBundleIDs` work unsupervised? | No. Accepted then silently ignored |
+| Does `PayloadRemovalDisallowed` hold unsupervised? | No. One passcode prompt, then it comes off |
+| **Is the erase avoidable for Path 02?** | **No** |
+
+Three independent checks (04, 05, 06) all point the same way. Supervision is
+load-bearing, and supervision means the erase.
+
+## Keybag format, resolved from source (not inferred)
+
+Read directly out of the installed `pymobiledevice3` 11.12.5, so this is no
+longer an open question.
+
+`MobileConfigService.escalate(keybag_file)`:
+
+```python
+keybag_data = Path(keybag_file).read_bytes()
+private_key = serialization.load_pem_private_key(keybag_data, password=None)
+cer = x509.load_pem_x509_certificate(keybag_data)
+escalate_response = await self._send_recv({"RequestType": "Escalate", "SupervisorCertificate": cer.public_bytes(Encoding.DER)})
+signed = PKCS7SignatureBuilder().set_data(escalate_response["Challenge"]).add_signer(cer, private_key, hashes.SHA256()).sign(Encoding.DER, [PKCS7Options.Binary])
+await self._send_recv({"RequestType": "EscalateResponse", "SignedRequest": signed})
+await self._send_recv({"RequestType": "ProceedWithKeybagMigration"})
+```
+
+- A keybag is **one PEM file: unencrypted private key + its certificate**
+- RSA or EC only, anything else raises `ProfileError`
+- `install_profile_silent` is just `escalate()` then `InstallProfileSilent`
+- Confirms `create-keybag` is unusable here: it always generates a fresh
+  self-signed key and cannot import, so it can never match a device prepared
+  with a Configurator identity
+
+`tools/verify_keybag.py` replays all of this offline, including the real PKCS7
+signature, against a random challenge. Tested against a synthetic good keybag
+(8 passes) and a deliberately mismatched key/cert pair (correctly rejected at
+the match check). So the keybag half of check 08 can be proven **before** the
+erase, leaving only the device-side handshake, which holds by construction if
+the device is prepared with the same organization.
+
+## Trap: openssl cannot extract a Configurator identity
+
+`openssl pkcs12 -in identity.p12 -clcerts -nokeys` fails with:
+
+```
+Could not find certificate from <stdin>
+```
+
+`-clcerts` filters to certificates openssl considers client certificates, and a
+Configurator supervision identity is frequently not flagged that way. The key
+extracts fine, the cert silently does not, and you end up with no keybag.
+
+Fixed by doing the conversion in Python with
+`pkcs12.load_key_and_certificates`, falling back to matching the private key's
+public numbers against the additional-certificates bag when the loader returns
+`cert=None`. Tested against both shapes of p12 plus a wrong-passphrase case.
+
+## Keybag verified against a real Configurator identity, 2026-09-16
+
+`verify_keybag.py` returned all eight passes on the actual exported identity:
+
+```
+certificate loads: C=US,O=MichaelHome,CN=Apple Configurator: MichaelHome (4C6535DE-...)
+certificate public key matches the private key
+certificate valid for another 7299 days (until 2046-09-11)
+DER encodes for SupervisorCertificate (947 bytes)
+PKCS7 challenge signature builds (1634 bytes)
+```
+
+RSA 2048, twenty year validity. The signing operation `escalate()` performs
+works with this key pair.
+
+### Two warnings, both benign, both silenced
+
+1. `PKCS#12 bundle could not be parsed as DER, falling back to parsing as BER.
+   Error details: DEFAULT value was explicitly encoded`. Apple encodes an ASN.1
+   DEFAULT explicitly, which is legal BER but not strict DER. The parse
+   succeeds. cryptography warns that this **may become an exception in a future
+   release**, so pin the cryptography version in the daemon's requirements
+   rather than tracking latest.
+2. `Attribute's length must be >= 1 and <= 64, but it was 70`. The Configurator
+   CN is 70 characters, over the X.500 ub-common-name limit. It only fires when
+   stringifying the subject for display. `escalate()` sends
+   `cert.public_bytes(Encoding.DER)` and never stringifies, so it cannot affect
+   the handshake.
+
+## Open questions
+
+| Question | Answered by | Status |
+| --- | --- | --- |
+| Can a `PayloadRemovalDisallowed` profile be deleted from Settings, unsupervised? | check 05 | **yes, after a passcode prompt** |
+| Does uninstall over lockdown work on iOS 26? | check 03 | **yes, confirmed, no prompt** |
+| Does mobdev2 wireless lockdown work on this network? | check 07 | discovery yes, session pending `--udid` retry |
+| Does `profile install --keybag` install silently once supervised? | check 08 | **keybag verified (8/8) on the real identity**; only the device handshake remains |
+| Does Mac-side `profile remove` still work once supervised? | check 10 | after supervision |
+| Does `DurationUntilRemoval` ever actually fire? | manual | unverified, assume no |
