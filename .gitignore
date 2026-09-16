@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.venv/
+results/run-*.json
+results/artifacts/
+
+# secrets. the supervision identity cannot be regenerated for a device that is
+# already prepared, and the keybag grants silent profile installs on it.
+*.p12
+*.pfx
+*.pem
+*.key
+*.cer
+*.crt
+keybag*
+.shiftd/
+
+# run output. contains device identifiers, full app inventories and local paths
+results/
+!results/.gitkeep
+.Rhistory
+.DS_Store

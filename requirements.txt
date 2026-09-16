@@ -1,0 +1,5 @@
+pymobiledevice3>=4.14
+
+# pinned: Apple p12 files need the BER fallback, which cryptography warns
+# may become an exception in a future release
+cryptography<52
