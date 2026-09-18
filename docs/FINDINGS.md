@@ -201,6 +201,185 @@ works with this key pair.
    `cert.public_bytes(Encoding.DER)` and never stringifies, so it cannot affect
    the handshake.
 
+## Supervised, 2026-09-16. Check 08 PASSES.
+
+Apple Configurator Prepare with Supervise completed. `profile cloud-configuration`
+reports:
+
+```
+IsSupervised: true
+AllowPairing: true
+IsMDMUnremovable: false
+ConfigurationWasApplied: true
+OrganizationName: <org>
+SupervisorHostCertificates: [ CN=Apple Configurator: <org> (<uuid>) ]
+```
+
+The device holds exactly the certificate the local keybag has the private key
+for. That is the pairing the whole design rests on.
+
+**`profile install --keybag` then installed a profile with no prompt on the
+device.** The escalate handshake works against a real supervised iPhone 16 on
+iOS 26.6.2 with an identity converted from a Configurator `.p12`.
+
+That was the last unknown. Unattended, scheduled profile swaps from the Mac are
+possible. The daemon is buildable.
+
+### Note on verifying supervision
+
+`pymobiledevice3 lockdown info` does **not** return an `IsSupervised` key on
+11.12.5, so grepping it returns nothing on a supervised device and looks like a
+failure. Use `pymobiledevice3 profile cloud-configuration` instead, or the
+banner at the top of the phone's root Settings screen.
+
+## Downloaded Profile vs Configuration Profile
+
+The trap that produced a false FAIL on check 10, worth knowing permanently.
+
+Settings > General > VPN & Device Management lists two different kinds of thing:
+
+| Heading | What it is | Removable |
+| --- | --- | --- |
+| DOWNLOADED PROFILE | staged by `profile install` with no keybag, never accepted | always, by design, it was never installed |
+| CONFIGURATION PROFILE | actually installed | depends on supervision and payload flags |
+
+A plain `profile install` on a supervised device still only stages. Deleting the
+resulting Downloaded Profile proves nothing. Check 10 originally tested one of
+these and reported the design as broken.
+
+Ground truth from `profile list` after check 08:
+
+```
+OrderedIdentifiers: [com.apple.configurator.usbrestrictedmode, com.shiftlab.marker]
+com.shiftlab.marker: IsActive true, PayloadRemovalDisallowed true
+```
+
+`com.shiftlab.blocked` from check 09 is absent, confirming it was staged and
+never installed. So the profile with no Remove Profile button was the silently
+installed marker.
+
+### Bonus: Configurator installs a USB restricted mode profile
+
+Prepare left `com.apple.configurator.usbrestrictedmode`, "USB Accessories while
+locked allowed", on the device. That keeps the lockdown channel reachable while
+the phone is locked, which is what a daemon firing at 22:30 against a phone
+sitting on a charger needs. Do not remove it.
+
+## Phase 2 results, 2026-09-16
+
+### Check 10 PASS. Silent install is genuinely non-removable.
+
+`com.shiftlab.marker`, installed with `profile install --keybag` on the
+supervised device, appears under CONFIGURATION PROFILE with **no Remove Profile
+button**. Supervision plus silent install is sufficient on its own.
+`allowUIConfigurationProfileInstallation=false` is not needed, so Settings stays
+usable for everything else. Check 11 is belt and braces, not a requirement.
+
+Erase All Content and Settings was **not** greyed out, as expected: nothing in
+the test profile sets `allowEraseContentAndSettings=false`. That remains an exit
+and should probably stay one.
+
+### Check 09 effectively passes, with a caveat worth knowing
+
+`blockedAppBundleIDs` with the keybag hid `com.apple.podcasts` from the Home
+Screen. Spotlight still surfaces the app's name in results, but tapping it does
+not launch: iOS shows a restrictions-enabled prompt instead. So the enforcement
+holds, the leak is cosmetic, and the app name remains visible in search.
+
+### Trap: `profile remove` takes no `--keybag`
+
+```
+$ pymobiledevice3 profile remove com.shiftlab.marker --keybag ~/.shiftd/keybag.pem
+Error: No such option: --keybag        (exit 2)
+```
+
+`profile_remove(service_provider, name)` takes only the identifier, and
+`remove_profile()` sends an unsigned RemoveProfile request. The harness was
+passing `--keybag`, so the command never ran and the emergency-exit probe
+reported a false negative that looked like a lockout.
+
+Lesson, the same one as `apps uninstall` and `profile install`: on this CLI a
+non-zero exit can mean "you typed it wrong" rather than "the device refused".
+Always check the stderr, never the exit code alone.
+
+### Emergency exit confirmed
+
+```
+$ pymobiledevice3 profile remove com.shiftlab.blocked
+$ pymobiledevice3 profile remove com.shiftlab.marker
+$ pymobiledevice3 profile list
+OrderedIdentifiers: [com.apple.configurator.usbrestrictedmode]
+```
+
+Plain `profile remove`, no keybag, removed a profile carrying
+`PayloadRemovalDisallowed: true` that the phone itself offered no way to delete.
+
+**This is the asymmetry the design rests on.** The phone cannot undo a shift.
+The Mac can, with one command and no supervision identity needed at the removal
+step. Keep it somewhere findable:
+
+```sh
+pymobiledevice3 profile remove com.shiftd.blocklist
+```
+
+## Verified end to end
+
+| Capability | Status |
+| --- | --- |
+| Silent, unattended profile install from the Mac | yes, keybag required |
+| Apps hidden by `blockedAppBundleIDs` | yes, Spotlight shows the name but will not launch |
+| Profile non-removable from the phone | yes, supervision plus silent install is enough |
+| Emergency removal from the Mac | yes, plain `profile remove` |
+| Wireless control after unplugging | discovery works, session pending a `--udid` retry |
+
+Nothing about the architecture is unproven any more. What is left is product
+work: the blocklist, the schedule, and the daemon that was already written.
+
+## RESTORE DROPS SUPERVISION. Confirmed the hard way, 2026-09-16.
+
+After a Finder "Restore Backup..." of the pre-supervision encrypted backup onto
+the freshly supervised phone:
+
+```
+$ pymobiledevice3 profile cloud-configuration | grep -i supervis
+    "IsSupervised": false,
+```
+
+All data came back. Supervision did not. The phone is a normal unsupervised
+iPhone 16 again.
+
+This is documented behavior, not bad luck:
+
+- Tech Lockdown: "Normally, if you attempt to restore a full backup on to a
+  newly supervised iPhone or iPad, the device will revert to being unsupervised."
+  ([source](https://www.techlockdown.com/articles/restore-full-backup-supervised-iphone))
+- Scalefusion: a normal backup-restore cycle causes "the Supervision settings to
+  be lost, and the device becomes unmanaged."
+  ([source](https://help.scalefusion.com/docs/supervise-ios-devices-without-data-loss-backup-supervise))
+
+The runbook flagged this as its one unverified assumption and routed the restore
+through Finder to dodge Configurator's documented unsupervising behavior. Finder
+does the same thing. **Post-setup restore of any kind reverts supervision.**
+
+### The two documented workarounds
+
+**A. Restore during Setup Assistant.** At "Transfer Your Apps & Data" choose
+From Mac or PC and restore there, instead of picking "Don't Transfer" and
+restoring afterwards. Tech Lockdown describes supervision surviving this path,
+but their write-up launders the backup through a second device first, which
+implies restoring the device's own pre-supervision backup may still revert it.
+Confidence: moderate, not proven.
+
+**B. Skip the restore.** Prepare with Supervise, set up fresh, sign in, let apps
+re-download. iCloud-synced data (Photos, Messages, Notes, Contacts, Keychain)
+comes back on its own. You lose local-only app state. Confidence: certain.
+
+### What this costs
+
+Nothing irreversible. The encrypted backup is intact, the supervision identity
+is exported and verified, and every capability is already proven on hardware.
+What it costs is another erase-and-restore cycle.
+
 ## Open questions
 
 | Question | Answered by | Status |
@@ -208,6 +387,7 @@ works with this key pair.
 | Can a `PayloadRemovalDisallowed` profile be deleted from Settings, unsupervised? | check 05 | **yes, after a passcode prompt** |
 | Does uninstall over lockdown work on iOS 26? | check 03 | **yes, confirmed, no prompt** |
 | Does mobdev2 wireless lockdown work on this network? | check 07 | discovery yes, session pending `--udid` retry |
-| Does `profile install --keybag` install silently once supervised? | check 08 | **keybag verified (8/8) on the real identity**; only the device handshake remains |
+| Does a Setup Assistant restore preserve supervision? | workaround A | **unproven, the next thing to test** |
+| Does `profile install --keybag` install silently once supervised? | check 08 | **YES. Verified end to end on the supervised device.** |
 | Does Mac-side `profile remove` still work once supervised? | check 10 | after supervision |
 | Does `DurationUntilRemoval` ever actually fire? | manual | unverified, assume no |
