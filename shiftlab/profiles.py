@@ -89,6 +89,36 @@ def blocked_apps_profile(bundle_ids: list, removal_disallowed: bool = True) -> b
     )
 
 
+def enforce_profile(
+    bundle_ids: list,
+    lock_profile_ui: bool = True,
+    removal_disallowed: bool = True,
+) -> bytes:
+    """Blocklist plus, optionally, a lock on the Settings profile UI.
+
+    Supervision alone does not stop a user deleting a profile from Settings,
+    even with PayloadRemovalDisallowed. allowUIConfigurationProfileInstallation
+    set to false is what removes that path. Supervised devices only.
+    """
+    restrictions = {
+        "PayloadType": "com.apple.applicationaccess",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": f"{BASE_ID}.enforce.restrictions",
+        "PayloadUUID": _uuid(),
+        "PayloadDisplayName": "ShiftLab Enforcement",
+        "blockedAppBundleIDs": list(bundle_ids),
+    }
+    if lock_profile_ui:
+        restrictions["allowUIConfigurationProfileInstallation"] = False
+    return _wrap(
+        name="enforce",
+        display_name="ShiftLab Enforcement",
+        description="Hides the listed apps and locks the Settings profile UI.",
+        payloads=[restrictions],
+        removal_disallowed=removal_disallowed,
+    )
+
+
 def identifier_for(name: str) -> str:
     return f"{BASE_ID}.{name}"
 

@@ -342,10 +342,15 @@ Do this now. If supervision failed, you want to know before you spend an hour re
 `Settings > General > About`, and the banner at the top of the main Settings screen.
 
 ```sh
-pymobiledevice3 lockdown info | grep -i supervised
+pymobiledevice3 profile cloud-configuration
 ```
 
-Expected: `IsSupervised: True`.
+Expected: `"IsSupervised": true`, plus `OrganizationName` and a
+`SupervisorHostCertificates` entry whose CN matches your Configurator identity.
+
+Do **not** use `pymobiledevice3 lockdown info | grep -i supervised`. Verified on
+11.12.5: that command returns no `IsSupervised` key at all, on supervised and
+unsupervised devices alike, so it prints nothing and reads as a failure.
 
 **If this goes wrong:** if it is false, redo Phase 3. Your data is still in the encrypted backup, so
 this is cheap. Do not continue with an unsupervised phone.
@@ -455,6 +460,16 @@ which is the better-documented direction.
 
 ## Phase 6. Restore your data
 
+> **CORRECTED 2026-09-16, after this went wrong in practice.**
+> A post-setup restore reverts the device to unsupervised. Finder's "Restore
+> Backup..." does it just as surely as Apple Configurator's restore does. Do
+> **not** pick "Don't Transfer Apps & Data" in Setup Assistant and restore
+> afterwards, which is what the original version of this phase said.
+>
+> Restore **during** Setup Assistant at "Transfer Your Apps & Data" > "From Mac
+> or PC", or skip the restore entirely and let iCloud repopulate. Verify with
+> `pymobiledevice3 profile cloud-configuration` before doing anything else.
+
 ### 6.1 Use Finder. Not Configurator.
 
 1. Connect the phone. Trust the Mac.
@@ -485,10 +500,15 @@ concern backups taken *from* supervised devices. Treat it as high confidence, no
 **So verify immediately after the restore, before you reconfigure anything:**
 
 ```sh
-pymobiledevice3 lockdown info | grep -i supervised
+pymobiledevice3 profile cloud-configuration
 ```
 
-Expected: `IsSupervised: True`.
+Expected: `"IsSupervised": true`, plus `OrganizationName` and a
+`SupervisorHostCertificates` entry whose CN matches your Configurator identity.
+
+Do **not** use `pymobiledevice3 lockdown info | grep -i supervised`. Verified on
+11.12.5: that command returns no `IsSupervised` key at all, on supervised and
+unsupervised devices alike, so it prints nothing and reads as a failure.
 
 **If this goes wrong:** if it came back false, nothing is lost. Your encrypted backup is still on the
 Mac and still valid. Redo Phase 3 to re-supervise, then redo Phase 6. The cost is time, not data. This
