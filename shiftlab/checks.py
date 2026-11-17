@@ -9,7 +9,6 @@ Phase 2 only makes sense after the device is supervised.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from . import profiles
 from .runner import (
