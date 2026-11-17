@@ -108,7 +108,6 @@ class Transport:
     last_binding: str = ""
     last_via: str = ""
     _library_broken: str = field(default="", init=False, repr=False)
-    _service_cache: Any = field(default=None, init=False, repr=False)
 
     # -- public API --------------------------------------------------------
 
