@@ -3,14 +3,22 @@
 A self-hosted replacement for Shift (shiftyourphone.com), for one iPhone and
 one Mac.
 
+## Status
+
+In progress. It has never run end to end. The verification harness has been
+run against a real iPhone, and the pieces it checks work there: silent profile
+install, hiding blocked apps, and removing the profile from the Mac (see
+`docs/FINDINGS.md`). The daemon has not yet driven a phone. The 50 unit tests
+pass with the phone mocked.
+
 Shift does not use Apple's Screen Time API. It enrolls the phone in supervised
 MDM over USB and drives it from a desktop. The useful consequence: with
 supervision you do not need an MDM server at all. Apple Configurator gives you
 a supervision identity, and `pymobiledevice3` pushes profiles with it straight
 from your Mac.
 
-Two packages here. `shiftlab` proves the assumptions. `shiftd` is the thing
-that runs.
+Two packages here. `shiftlab` proves the assumptions. `shiftd` is the daemon
+meant to run on the Mac.
 
 ## Read this before you erase anything
 
@@ -81,7 +89,8 @@ python -m shiftd reconcile --dry-run
 
 `unshift` refuses while a locked shift is active and tells you when it ends.
 
-Design notes in `docs/DAEMON.md`. The parts worth knowing:
+Design notes in `docs/DAEMON.md`. The parts worth knowing (design, covered by
+unit tests, not yet run against a phone):
 
 - **Locked shifts cannot be ended early, including from the Mac.** That is the
   commitment device. Countdowns run off a monotonic budget so changing the
