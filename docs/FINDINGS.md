@@ -322,7 +322,7 @@ step. Keep it somewhere findable:
 pymobiledevice3 profile remove com.shiftd.blocklist
 ```
 
-## Verified end to end
+## Verified component by component
 
 | Capability | Status |
 | --- | --- |
