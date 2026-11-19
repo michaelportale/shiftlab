@@ -2,7 +2,8 @@
 <!--
   shiftd LaunchAgent. Runs one reconcile pass every 60 seconds.
 
-  Edit the three absolute paths before loading: launchd does not expand ~, and
+  Edit the five absolute paths before loading (replace /Users/YOU and the
+  checkout location with your own): launchd does not expand ~, and
   it does not read your shell profile, so the interpreter has to be spelled out.
   If you are not using a venv, point Program to /usr/bin/python3 and make sure
   pymobiledevice3 is importable from it.
@@ -16,20 +17,20 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/REDACTED/Personal-Projects/shiftlab/.venv/bin/python3</string>
+        <string>/Users/YOU/Personal-Projects/shiftlab/.venv/bin/python3</string>
         <string>-m</string>
         <string>shiftd</string>
         <string>reconcile</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/REDACTED/Personal-Projects/shiftlab</string>
+    <string>/Users/YOU/Personal-Projects/shiftlab</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <!-- So `-m shiftd` resolves without installing the package. -->
         <key>PYTHONPATH</key>
-        <string>/Users/REDACTED/Personal-Projects/shiftlab</string>
+        <string>/Users/YOU/Personal-Projects/shiftlab</string>
         <key>PYTHONUNBUFFERED</key>
         <string>1</string>
     </dict>
@@ -44,9 +45,9 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/REDACTED/Library/Logs/shiftd/agent.out.log</string>
+    <string>/Users/YOU/Library/Logs/shiftd/agent.out.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/REDACTED/Library/Logs/shiftd/agent.err.log</string>
+    <string>/Users/YOU/Library/Logs/shiftd/agent.err.log</string>
 
     <key>ProcessType</key>
     <string>Background</string>

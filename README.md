@@ -89,6 +89,9 @@ python -m shiftd reconcile --dry-run
 
 `unshift` refuses while a locked shift is active and tells you when it ends.
 
+Before loading the LaunchAgent, replace `/Users/YOU` (and the checkout path) in the five absolute paths of
+`launchd/com.shiftd.agent.plist` with your own; launchd does not expand `~`. Steps are in `docs/DAEMON.md`.
+
 Design notes in `docs/DAEMON.md`. The parts worth knowing (design, covered by
 unit tests, not yet run against a phone):
 

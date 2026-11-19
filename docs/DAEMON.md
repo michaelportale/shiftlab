@@ -154,7 +154,9 @@ profiles are on the phone, and whether the LaunchAgent is loaded.
 
 ## launchd
 
-Edit the three absolute paths in `launchd/com.shiftd.agent.plist` first.
+Edit the five absolute paths in `launchd/com.shiftd.agent.plist` first: the
+interpreter, `WorkingDirectory`, `PYTHONPATH` and the two log paths all start
+with the placeholder `/Users/YOU`.
 launchd does not expand `~` and does not read your shell profile.
 
 ```sh
